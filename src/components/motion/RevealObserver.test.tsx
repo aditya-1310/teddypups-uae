@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { act, render } from "@testing-library/react";
 import { RevealObserver } from "./RevealObserver";
 
+vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+
 type Entry = { target: Element; isIntersecting: boolean };
 let observers: { cb: (e: Entry[]) => void; observed: Set<Element> }[] = [];
 

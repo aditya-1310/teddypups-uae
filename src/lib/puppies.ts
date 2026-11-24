@@ -92,3 +92,23 @@ export function matchSummary(count: number, filtered: boolean): string {
   const noun = count === 1 ? "puppy" : "puppies";
   return filtered ? `${count} ${noun} match` : `${count} ${noun} looking for a home`;
 }
+
+/** "Max, Maltipoo, boy, 3 months, available" — the card's accessible name. */
+export function puppyLabel(p: Puppy): string {
+  const who = p.name ? `${p.displayName}, ${p.breed}` : p.displayName;
+  return `${who}, ${p.genderLabel.toLowerCase()}, ${p.age}, available`;
+}
+
+/** "Maltipoo · boy · 3 months" (breed only shown when the puppy has its own name). */
+export function puppyMeta(p: Puppy): string {
+  return [p.name ? p.breed : null, p.genderLabel.toLowerCase(), p.age].filter(Boolean).join(" · ");
+}
+
+export const hasVideo = (p: { media: Media[] }) => p.media.some((m) => m.kind === "video");
+
+/** "Ace, Pomeranian, boy, 3 months, gone home" */
+export function goneLabel(p: GoneHomePuppy): string {
+  const breed = p.facts.Breed;
+  const named = p.name !== breed;
+  return [named ? p.name : null, breed, p.facts["Boy or girl"].toLowerCase(), p.facts.Age, "gone home"].filter(Boolean).join(", ");
+}

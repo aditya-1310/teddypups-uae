@@ -4,6 +4,7 @@ import { MobileBar } from "@/components/layout/MobileBar";
 import { PageCurtain } from "@/components/layout/PageCurtain";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
+import { RevealObserver } from "@/components/motion/RevealObserver";
 import { SITE } from "@/lib/site";
 import "./globals.css";
 
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className={`${fraunces.variable} ${figtree.variable} ${shantell.variable}`}>
       <body>
         <PageCurtain />
+        <RevealObserver />
         <a href="#main" className="sr-only-focusable fixed left-4 top-4 z-[100] rounded-full bg-cocoa px-5 py-3 font-semibold text-milk">
           Skip to content
         </a>

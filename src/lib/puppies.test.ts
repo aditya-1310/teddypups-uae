@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterPuppies, getPuppies, getPuppy, matchSummary, parseFilters } from "./puppies";
+import { filterPuppies, getGoneHome, getPuppies, getPuppy, goneLabel, matchSummary, parseFilters } from "./puppies";
 
 const slugs = (list: { slug: string }[]) => list.map((p) => p.slug);
 
@@ -60,6 +60,14 @@ describe("parseFilters", () => {
       breed: "poodle",
       gender: "female",
     });
+  });
+});
+
+describe("goneLabel", () => {
+  const find = (slug: string) => getGoneHome().find((p) => p.slug === slug)!;
+  it("matches the reference card labels", () => {
+    expect(goneLabel(find("pomeranian-ace-boy"))).toBe("Ace, Pomeranian, boy, 3 months, gone home");
+    expect(goneLabel(find("blue-marle-pomeranian"))).toBe("Pomeranian, boy, 3 months, gone home");
   });
 });
 

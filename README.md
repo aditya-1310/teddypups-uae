@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TeddyPups U.A.E. — Full-Stack Clone
 
-## Getting Started
+A responsive, test-driven Next.js (App Router + TypeScript + Tailwind CSS v4) clone of [TeddyPups U.A.E.](https://puppy.instabizweb.com/), built as part of the Blutec AI Full Stack Developer Technical Round Assignment.
 
-First, run the development server:
+## Tech Stack
+- **Framework:** Next.js 16 (App Router, Turbopack, Static Site Generation + Route Handlers)
+- **Language:** TypeScript (strict mode)
+- **Styling:** Tailwind CSS v4 + custom CSS design tokens & keyframe animations (`Fraunces`, `Figtree`, `Shantell Sans` via `next/font/google`)
+- **Validation:** Zod (`src/lib/enquiry.ts` + `POST /api/enquiries`)
+- **Testing:** Vitest + React Testing Library + jsdom (TDD across data, API, and interactive UI components)
+
+## Routes & Features
+- `/` — 8-scene scrollytelling homepage (`HeroScene`, `MeetScene`, `PathsScene`, `ChatScene` with inline video playback, `PassportScene`, `DuskScene` with lightbox viewer, `NightScene`, `HomeScene`) + `PupCompanion` & `PawTrail`
+- `/puppies` — Sketchbook-styled catalog of 15 available puppies with procedural SVG frames, URL-synced filters (`origin`, `collection`, `breed`, `gender`), and an "Already gone home" preview strip
+- `/puppies/[slug]` — 42 statically generated puppy profile pages (15 available + 27 gone home) with photo/video gallery, full-screen `Lightbox`, health guarantees, and pre-filled enquiry form
+- `/happy-families` — 64 polaroid family moments with full-screen keyboard-accessible `Lightbox`
+- `/how-it-works` — Interactive "In Dubai" vs "Imported" journey switcher, premium promise stamps, and `#delivery` details
+- `/faq` — Live search & accessible accordion board with `FAQPage` JSON-LD structured data
+- `/contact` — Interactive "Dear TeddyPups" letter form wired to `POST /api/enquiries` with honeypot spam protection and sealing/posting animation
+- `/gone-home` — 27 adopted puppies styled as vintage boarding tickets
+
+## Local Development & Testing
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm test          # Run Vitest unit & component tests (56 tests across 14 files)
+npm run build     # Production build & TypeScript check
+npm run dev       # Start local dev server
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project Structure
+```text
+src/
+├── app/                # App Router pages & /api/enquiries route handler
+├── components/         # Feature-grouped UI components + *.test.tsx specs
+├── data/               # Structured JSON datasets (puppies, gone-home, family-photos, faqs, journeys)
+├── lib/                # Domain logic, Zod validation, deterministic sketch generator, site config
+└── styles/             # Scene, illustration, and keyframe animation styles
+```

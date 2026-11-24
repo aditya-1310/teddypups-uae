@@ -1,8 +1,19 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { PawIcon } from "@/components/icons";
 
 export function PageCurtain() {
+  const [state, setState] = useState<"intro" | "idle">("intro");
+
+  useEffect(() => {
+    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const id = setTimeout(() => setState("idle"), reduce ? 0 : 1100);
+    return () => clearTimeout(id);
+  }, []);
+
   return (
-    <div className="tp-curtain" data-state="intro" aria-hidden="true">
+    <div className="tp-curtain" data-state={state} aria-hidden="true">
       <div className="tp-curtain__blanket">
         <svg className="tp-curtain__edge tp-curtain__edge--top" width="100%" height="40" preserveAspectRatio="none">
           <defs>

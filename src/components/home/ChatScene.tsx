@@ -1,9 +1,26 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useRef, useState } from "react";
 import { Teddy } from "@/components/teddy/Teddy";
 import { SITE } from "@/lib/site";
 
 export function ChatScene() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const toggleVideo = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      void v.play();
+      setPlaying(true);
+    } else {
+      v.pause();
+      setPlaying(false);
+    }
+  };
   return (
     <div data-section="journey">
       <section data-pup-scene="true" data-tone="light" className="tp-scene tp-chat" style={{ "--sky-top": "#f7d18d", "--sky-bottom": "#f0b866" } as React.CSSProperties} aria-labelledby="journey-title">
@@ -123,9 +140,24 @@ export function ChatScene() {
                     </div>
                   </div>
                   <div className="tp-msg tp-msg--them tp-msg--media">
-                    <div className="tp-clip">
-                      <video src="/media/dSAUmXs8Qai9/ef39cbea20/27b888_323008bb0f6a41d4bde2a0da7206cd98-720p.mp4" poster="/media/FHyoHcIosLZE/60f6e7e00a/27b888_323008bb0f6a41d4bde2a0da7206cd98f000.jpg" muted loop playsInline preload="none" aria-label="Video of a tiny apricot teddy bear puppy in the TeddyPups showroom" />
-                      <button type="button" className="tp-clip__play" aria-pressed="false" aria-label="Play video">
+                    <div className="tp-clip" data-playing={playing || undefined}>
+                      <video
+                        ref={videoRef}
+                        src="/media/dSAUmXs8Qai9/ef39cbea20/27b888_323008bb0f6a41d4bde2a0da7206cd98-720p.mp4"
+                        poster="/media/FHyoHcIosLZE/60f6e7e00a/27b888_323008bb0f6a41d4bde2a0da7206cd98f000.jpg"
+                        muted
+                        loop
+                        playsInline
+                        preload="none"
+                        aria-label="Video of a tiny apricot teddy bear puppy in the TeddyPups showroom"
+                      />
+                      <button
+                        type="button"
+                        className="tp-clip__play"
+                        aria-pressed={playing}
+                        aria-label={playing ? "Pause video" : "Play video"}
+                        onClick={toggleVideo}
+                      >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M8 5v14l11-7z" />
                         </svg>
