@@ -6,8 +6,9 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { PawIcon } from "@/components/icons";
 import { Teddy } from "@/components/teddy/Teddy";
 import { getPuppies, hasVideo } from "@/lib/puppies";
+import { cuePup } from "@/lib/pupRig";
 
-const DOOR_COLORS = ["#a24a1a", "#5a3a28", "#2f6e9e", "#c2622b", "#6f4e37"];
+const DOOR_COLORS = ["#a24a1a", "#5a3a28", "#d4893f", "#b8644a", "#7a4a2e"];
 
 /**
  * Pure corridor math: given vertical scroll progress [0..1] through the pinned
@@ -17,20 +18,20 @@ const DOOR_COLORS = ["#a24a1a", "#5a3a28", "#2f6e9e", "#c2622b", "#6f4e37"];
 export function computeCorridorState(
   progress: number,
   maxTranslate: number,
-  doorCenters: number[],
+  doorPositions: number[],
   triggerX: number,
 ): { translateX: number; openDoors: boolean[] } {
   const clamped = Math.max(0, Math.min(1, progress));
   const translateX = clamped * Math.max(0, maxTranslate);
-  const openDoors = doorCenters.map((center) => center - translateX <= triggerX);
+  const openDoors = doorPositions.map((pos) => pos - translateX <= triggerX);
   return { translateX, openDoors };
 }
 
 export function MeetScene() {
   const puppies = getPuppies();
   const rangeRef = useRef<HTMLDivElement>(null);
+  const hallRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLOListElement>(null);
-  const floorRef = useRef<HTMLDivElement>(null);
 
   const [pinned, setPinned] = useState(false);
   const [pinHeight, setPinHeight] = useState<number | undefined>(undefined);
@@ -46,6 +47,8 @@ export function MeetScene() {
       setPinned(isDesktop);
       if (!isDesktop) {
         setPinHeight(undefined);
+        hallRef.current?.style.removeProperty("--door-w");
+        hallRef.current?.style.removeProperty("--floor-x");
         if (trackRef.current) trackRef.current.style.transform = "";
       }
     };
@@ -61,54 +64,115 @@ export function MeetScene() {
     if (!pinned) return;
 
     let maxTranslate = 0;
-    let doorCenters: number[] = [];
+    let doorLefts: number[] = [];
+    let doorEls: HTMLLIElement[] = [];
+    let prevOpen: boolean[] = [];
+    let targetX = 0;
+    let smoothX = 0;
+    let initialized = false;
     let raf = 0;
 
     const measure = () => {
       const track = trackRef.current;
-      if (!track) return;
+      const hall = hallRef.current;
+      if (!track || !hall) return;
+
+      const stage = hall.parentElement;
+      if (stage) {
+        const head = stage.querySelector<HTMLElement>(".tp-meet__head");
+        const maxPlateH = Math.max(
+          64,
+          ...Array.from(track.querySelectorAll<HTMLElement>(".tp-door__plate")).map((el) => el.offsetHeight),
+        );
+        const floorH = hall.querySelector<HTMLElement>(".tp-meet__floor")?.offsetHeight ?? 0;
+        const headBottom = head ? head.offsetTop + head.offsetHeight : 0;
+        const doorW = Math.max(
+          128,
+          Math.min(256, 0.15 * window.innerWidth, (stage.clientHeight - headBottom - floorH - maxPlateH - 40) / 1.3),
+        );
+        hall.style.setProperty("--door-w", `${doorW.toFixed(0)}px`);
+      }
+
       maxTranslate = Math.max(0, track.scrollWidth - window.innerWidth);
-      const items = Array.from(track.querySelectorAll<HTMLLIElement>("li.tp-door:not(.tp-door--all)"));
-      doorCenters = items.map((li) => li.offsetLeft + li.offsetWidth * 0.5);
-      // Scroll distance equals horizontal travel + 1 viewport height for the sticky stage
-      setPinHeight(Math.round(maxTranslate * 0.9 + window.innerHeight));
+      doorEls = Array.from(track.querySelectorAll<HTMLLIElement>("li.tp-door:not(.tp-door--all)"));
+      doorLefts = doorEls.map((li) => li.offsetLeft);
+      setPinHeight(Math.round(maxTranslate * 0.8 + window.innerHeight));
     };
 
-    const update = () => {
-      raf = 0;
+    const readTarget = () => {
       const range = rangeRef.current;
-      const track = trackRef.current;
-      if (!range || !track) return;
-
+      if (!range) return 0;
       const rect = range.getBoundingClientRect();
       const scrollable = Math.max(1, range.offsetHeight - window.innerHeight);
-      const progress = -rect.top / scrollable;
-      const triggerX = window.innerWidth * 0.44;
-      const { translateX, openDoors: nextOpen } = computeCorridorState(progress, maxTranslate, doorCenters, triggerX);
+      const progress = Math.max(0, Math.min(1, -rect.top / scrollable));
+      return progress * maxTranslate;
+    };
 
-      track.style.transform = `translate3d(${-translateX.toFixed(1)}px, 0, 0)`;
-      if (floorRef.current) {
-        floorRef.current.style.backgroundPositionX = `${-translateX.toFixed(1)}px`;
+    const applyX = (x: number, emitCue: boolean) => {
+      const track = trackRef.current;
+      const hall = hallRef.current;
+      if (!track || !hall) return;
+
+      track.style.transform = `translate3d(${-x.toFixed(1)}px, 0, 0)`;
+      hall.style.setProperty("--floor-x", `${-x.toFixed(1)}px`);
+
+      const triggerX = window.innerWidth * 0.36;
+      const progress = maxTranslate > 0 ? x / maxTranslate : 0;
+      const { openDoors: nextOpen } = computeCorridorState(progress, maxTranslate, doorLefts, triggerX);
+
+      if (emitCue) {
+        nextOpen.forEach((isOpen, idx) => {
+          if (isOpen && !prevOpen[idx] && doorEls[idx]) {
+            cuePup({ look: doorEls[idx], secs: 0.9 });
+          }
+        });
       }
+      prevOpen = nextOpen;
       setOpenDoors((prev) => (prev.length === nextOpen.length && prev.every((v, i) => v === nextOpen[i]) ? prev : nextOpen));
     };
 
-    const onScroll = () => {
-      if (!raf) raf = requestAnimationFrame(update);
+    const step = () => {
+      raf = 0;
+      targetX = readTarget();
+      if (!initialized) {
+        smoothX = targetX;
+        initialized = true;
+        applyX(smoothX, false);
+        return;
+      }
+      smoothX += (targetX - smoothX) * 0.24;
+      if (Math.abs(targetX - smoothX) < 0.2) {
+        smoothX = targetX;
+      } else {
+        raf = requestAnimationFrame(step);
+      }
+      applyX(smoothX, true);
+    };
+
+    const scheduleStep = () => {
+      if (!raf) raf = requestAnimationFrame(step);
     };
 
     const onResize = () => {
       measure();
-      update();
+      targetX = readTarget();
+      smoothX = targetX;
+      applyX(smoothX, false);
     };
 
     measure();
-    update();
-    window.addEventListener("scroll", onScroll, { passive: true });
+    step();
+
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(onResize) : null;
+    if (trackRef.current) ro?.observe(trackRef.current);
+    if (hallRef.current?.parentElement) ro?.observe(hallRef.current.parentElement);
+
+    window.addEventListener("scroll", scheduleStep, { passive: true });
     window.addEventListener("resize", onResize, { passive: true });
     return () => {
       if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", onScroll);
+      ro?.disconnect();
+      window.removeEventListener("scroll", scheduleStep);
       window.removeEventListener("resize", onResize);
     };
   }, [pinned]);
@@ -143,7 +207,7 @@ export function MeetScene() {
               </Link>
             </header>
 
-            <div className="tp-meet__hall">
+            <div ref={hallRef} className="tp-meet__hall">
               <ol ref={trackRef} className="tp-meet__track" data-treadmill="true" aria-label="Puppies looking for a family">
                 {puppies.map((p, i) => {
                   const isOpen = !pinned || (openDoors[i] ?? false);
@@ -188,7 +252,7 @@ export function MeetScene() {
                     </li>
                   );
                 })}
-                <li className="tp-door tp-door--all">
+                <li className="tp-door tp-door--all" data-open="true">
                   <Link className="tp-door__link" href="/puppies">
                     <span className="tp-door__frame tp-door__frame--all">
                       <span className="font-plush tp-door__all">Meet them all</span>
@@ -197,8 +261,14 @@ export function MeetScene() {
                 </li>
               </ol>
 
-              <div ref={floorRef} aria-hidden="true" className="tp-meet__floor" />
-              <div data-pup-stop="true" data-pose="walk" data-facing="right" data-act="doorway" data-lane="true" className="pup-stop tp-meet__teddy">
+              <div aria-hidden="true" className="tp-meet__floor" />
+              <div
+                data-pup-stop="true"
+                data-pose={pinned ? "walk" : "sit"}
+                data-facing="right"
+                data-act={pinned ? "treadmill" : undefined}
+                className="pup-stop tp-meet__teddy"
+              >
                 <Teddy pose="sit" />
               </div>
             </div>

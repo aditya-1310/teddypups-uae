@@ -4,11 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Teddy } from "@/components/teddy/Teddy";
+import { cuePup } from "@/lib/pupRig";
 import { SITE } from "@/lib/site";
 
 export function ChatScene() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const stepsRef = useRef<HTMLOListElement>(null);
+  const screenRef = useRef<HTMLDivElement>(null);
+  const prevStepRef = useRef(0);
   const [playing, setPlaying] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
 
@@ -22,6 +25,15 @@ export function ChatScene() {
       items.forEach((el, i) => {
         if (el.getBoundingClientRect().top <= midY) next = i;
       });
+      if (next > prevStepRef.current) {
+        const groupEl = screenRef.current?.querySelector(`[data-step="${next}"]`);
+        cuePup({
+          look: groupEl,
+          secs: 1.4,
+          say: next === 1 ? "ooh, photos!" : next === 2 ? "home soon!" : undefined,
+        });
+      }
+      prevStepRef.current = next;
       setActiveStep(next);
     };
     onScroll();
@@ -103,7 +115,7 @@ export function ChatScene() {
                   </span>
                 </span>
               </div>
-              <div className="tp-phone__screen">
+              <div ref={screenRef} className="tp-phone__screen">
                 <p className="tp-msg tp-msg--me">
                   Hi TeddyPups! I&#x27;d love to know more about your puppies.
                 </p>

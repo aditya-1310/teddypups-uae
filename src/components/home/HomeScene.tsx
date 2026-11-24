@@ -2,23 +2,27 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { Teddy } from "@/components/teddy/Teddy";
 import { SITE } from "@/lib/site";
 
 export function HomeScene() {
   const sectionRef = useRef<HTMLElement>(null);
-  const [visited, setVisited] = useState(false);
 
   useEffect(() => {
     const el = sectionRef.current;
     if (!el || typeof IntersectionObserver === "undefined") {
       return;
     }
+    if (!document.documentElement.dataset.pup) {
+      el.dataset.visited = "false";
+    }
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
-          setVisited(true);
+          if (!document.documentElement.dataset.pup) {
+            el.dataset.visited = "true";
+          }
           io.disconnect();
         }
       },
@@ -34,7 +38,6 @@ export function HomeScene() {
         ref={sectionRef}
         data-pup-scene="true"
         data-tone="dark"
-        data-visited={visited ? "true" : "false"}
         className="tp-scene tp-home"
         style={{ "--sky-top": "#2f1a10", "--sky-bottom": "#24130b" } as CSSProperties}
         aria-labelledby="cta-title"

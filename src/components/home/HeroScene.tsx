@@ -25,7 +25,6 @@ export function HeroScene() {
   const [hovered, setHovered] = useState<number | null>(null);
   const [poppedTag, setPoppedTag] = useState<number | null>(null);
   const [preloadIdx, setPreloadIdx] = useState(6);
-  const [here, setHere] = useState(true);
   const nextPupRef = useRef(6);
   const turnRef = useRef(0);
   const sectionRef = useRef<HTMLElement>(null);
@@ -70,9 +69,9 @@ export function HeroScene() {
   useEffect(() => {
     const onScroll = () => {
       const el = sectionRef.current;
-      if (!el) return;
+      if (!el || document.documentElement.dataset.pup) return;
       const rect = el.getBoundingClientRect();
-      setHere(rect.bottom > window.innerHeight * 0.35);
+      el.dataset.here = rect.bottom > window.innerHeight * 0.35 ? "true" : "false";
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -87,7 +86,6 @@ export function HeroScene() {
         ref={sectionRef}
         data-pup-scene="true"
         data-tone="light"
-        data-here={here ? "true" : "false"}
         className="tp-scene tp-hero"
         style={{ "--sky-top": "#fffdf8", "--sky-bottom": "#fff1d8", "--quilt": "#fff1d8" } as CSSProperties}
         aria-labelledby="hero-title"
