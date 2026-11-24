@@ -1,12 +1,44 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Teddy } from "@/components/teddy/Teddy";
 import { SITE } from "@/lib/site";
 
 export function HomeScene() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const [visited, setVisited] = useState(false);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setVisited(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.35 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   return (
     <div data-section="cta">
-      <section data-pup-scene="true" data-tone="dark" className="tp-scene tp-home" style={{ "--sky-top": "#2f1a10", "--sky-bottom": "#24130b" } as React.CSSProperties} aria-labelledby="cta-title">
+      <section
+        ref={sectionRef}
+        data-pup-scene="true"
+        data-tone="dark"
+        data-visited={visited ? "true" : "false"}
+        className="tp-scene tp-home"
+        style={{ "--sky-top": "#2f1a10", "--sky-bottom": "#24130b" } as CSSProperties}
+        aria-labelledby="cta-title"
+      >
         <div className="tp-home__copy gutter">
           <h2 id="cta-title" className="font-plush text-huge">
             Ready to meet your new best friend?
@@ -20,7 +52,13 @@ export function HomeScene() {
           <span aria-hidden="true" className="tp-house__lamp" />
           <div className="tp-house__doorway">
             <span className="tp-house__inside">
-              <Image src="/media/Z0ToauDx7Eve/5fffe4d022/b942a5_4b8cfb8204d24eadaf524332aba1dc15-mv2.webp" alt="Max, waiting inside" fill sizes="16rem" style={{ position: "absolute", height: "100%", width: "100%", left: "0", top: "0", right: "0", bottom: "0", objectFit: "cover", objectPosition: "53.8% 44.3%", color: "transparent", backgroundColor: "#785838" } as React.CSSProperties} />
+              <Image
+                src="/media/Z0ToauDx7Eve/5fffe4d022/b942a5_4b8cfb8204d24eadaf524332aba1dc15-mv2.webp"
+                alt="Max, waiting inside"
+                fill
+                sizes="16rem"
+                style={{ objectFit: "cover", objectPosition: "53.8% 44.3%", backgroundColor: "#785838" }}
+              />
             </span>
             <span aria-hidden="true" className="tp-house__door">
               <span className="tp-house__peep" />

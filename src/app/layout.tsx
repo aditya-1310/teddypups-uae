@@ -5,6 +5,7 @@ import { PageCurtain } from "@/components/layout/PageCurtain";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { RevealObserver } from "@/components/motion/RevealObserver";
+import { PawCursorTrail } from "@/components/motion/PawCursorTrail";
 import { SITE } from "@/lib/site";
 import "./globals.css";
 
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </main>
         <SiteFooter />
         <MobileBar />
+        <PawCursorTrail />
       </body>
     </html>
   );

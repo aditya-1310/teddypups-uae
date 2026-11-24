@@ -2,13 +2,32 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Teddy } from "@/components/teddy/Teddy";
 import { SITE } from "@/lib/site";
 
 export function ChatScene() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const stepsRef = useRef<HTMLOListElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [activeStep, setActiveStep] = useState(0);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const list = stepsRef.current;
+      if (!list) return;
+      const items = Array.from(list.querySelectorAll<HTMLLIElement>("li.tp-chat__step"));
+      const midY = window.innerHeight * 0.55;
+      let next = 0;
+      items.forEach((el, i) => {
+        if (el.getBoundingClientRect().top <= midY) next = i;
+      });
+      setActiveStep(next);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const toggleVideo = () => {
     const v = videoRef.current;
@@ -32,8 +51,8 @@ export function ChatScene() {
             <p className="text-lede mt-5 max-w-[42ch] text-[var(--ink-soft)]">
               A premium, step-by-step concierge experience. We make adoption simple, secure, and purely joyful.
             </p>
-            <ol className="tp-chat__steps">
-              <li className="tp-chat__step" data-done="true">
+            <ol ref={stepsRef} className="tp-chat__steps">
+              <li className="tp-chat__step" data-done={activeStep > 0 ? "true" : undefined} data-active={activeStep === 0 ? "true" : undefined}>
                 <span className="tp-chat__num font-plush" aria-hidden="true">
                   1
                 </span>
@@ -44,7 +63,7 @@ export function ChatScene() {
                   Select your preferred breed or tell us what you&#x27;re looking for. We&#x27;ll guide you based on availability and your lifestyle.
                 </p>
               </li>
-              <li className="tp-chat__step" data-done="true">
+              <li className="tp-chat__step" data-done={activeStep > 1 ? "true" : undefined} data-active={activeStep === 1 ? "true" : undefined}>
                 <span className="tp-chat__num font-plush" aria-hidden="true">
                   2
                 </span>
@@ -55,7 +74,7 @@ export function ChatScene() {
                   Our team will share real photos, health details, and all necessary information directly on WhatsApp.
                 </p>
               </li>
-              <li className="tp-chat__step" data-active="true">
+              <li className="tp-chat__step" data-active={activeStep === 2 ? "true" : undefined}>
                 <span className="tp-chat__num font-plush" aria-hidden="true">
                   3
                 </span>
@@ -122,7 +141,7 @@ export function ChatScene() {
                     </ul>
                   </div>
                 </div>
-                <div className="tp-msg-group" data-step="1" data-show="true">
+                <div className="tp-msg-group" data-step="1" data-show={activeStep >= 1 ? "true" : "false"}>
                   <div className="tp-msg tp-msg--them tp-msg--media">
                     <div className="tp-snaps">
                       <span className="tp-snaps__one">
@@ -168,7 +187,7 @@ export function ChatScene() {
                     Our team will share real photos, health details, and all necessary information directly on WhatsApp.
                   </p>
                 </div>
-                <div className="tp-msg-group" data-step="2" data-show="true">
+                <div className="tp-msg-group" data-step="2" data-show={activeStep >= 2 ? "true" : "false"}>
                   <div className="tp-msg tp-msg--them">
                     <p>
                       Once confirmed, we handle everything professionally and ensure your puppy reaches you safely and stress-free.

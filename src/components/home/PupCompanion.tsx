@@ -1,88 +1,269 @@
+"use client";
 
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { TEDDY_POSES } from "@/components/teddy/poses";
+
+export type PupStopRect = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  pageY: number;
+  pose: string;
+  behind: boolean;
+  facing: 1 | -1;
+};
+
+export type PupFrame = {
+  x: number;
+  y: number;
+  scale: number;
+  pose: string;
+  behind: boolean;
+  facing: 1 | -1;
+  traveling: boolean;
+};
+
+const BUBBLES = ["woof!", "hi friend!", "belly rubs?", "let's play!", "pick me!"];
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+/**
+ * Pure scroll-stop interpolator: finds which two `.pup-stop` anchors bracket
+ * `anchorPageY` and smoothly interpolates Teddy's viewport coordinates, scale,
+ * facing direction, and pose.
+ */
+export function interpolatePupStops(stops: PupStopRect[], anchorPageY: number): PupFrame {
+  const first = stops[0];
+  if (stops.length === 1 || anchorPageY <= first.pageY) {
+    return {
+      x: first.x,
+      y: first.y,
+      scale: first.w / 300,
+      pose: first.pose,
+      behind: first.behind,
+      facing: first.facing,
+      traveling: false,
+    };
+  }
+
+  const last = stops[stops.length - 1];
+  if (anchorPageY >= last.pageY) {
+    return {
+      x: last.x,
+      y: last.y,
+      scale: last.w / 300,
+      pose: last.pose,
+      behind: last.behind,
+      facing: last.facing,
+      traveling: false,
+    };
+  }
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i];
+    const b = stops[i + 1];
+    if (anchorPageY >= a.pageY && anchorPageY <= b.pageY) {
+      const span = Math.max(1, b.pageY - a.pageY);
+      const rawT = (anchorPageY - a.pageY) / span;
+      // Smoothstep for gentle acceleration/deceleration between scenes
+      const t = rawT * rawT * (3 - 2 * rawT);
+      const x = lerp(a.x, b.x, t);
+      const y = lerp(a.y, b.y, t);
+      const w = lerp(a.w, b.w, t);
+      const traveling = rawT > 0.08 && rawT < 0.92;
+      const dx = b.x - a.x;
+      const facing: 1 | -1 = traveling && Math.abs(dx) > 24 ? (dx >= 0 ? 1 : -1) : rawT < 0.5 ? a.facing : b.facing;
+      const pose = traveling ? "walk" : rawT < 0.5 ? a.pose : b.pose;
+      const behind = rawT < 0.12 ? a.behind : rawT > 0.88 ? b.behind : false;
+      return { x, y, scale: w / 300, pose, behind, facing, traveling };
+    }
+  }
+
+  return {
+    x: last.x,
+    y: last.y,
+    scale: last.w / 300,
+    pose: last.pose,
+    behind: last.behind,
+    facing: last.facing,
+    traveling: false,
+  };
+}
 
 export function PupCompanion() {
+  const layerRef = useRef<HTMLDivElement>(null);
+  const actorRef = useRef<HTMLDivElement>(null);
+  const bodyWrapRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const [bubble, setBubble] = useState<string | null>(null);
+  const bubbleIdxRef = useRef(0);
+  const bubbleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  const petTeddy = () => {
+    const text = BUBBLES[bubbleIdxRef.current % BUBBLES.length];
+    bubbleIdxRef.current += 1;
+    setBubble(text);
+    if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+    bubbleTimerRef.current = setTimeout(() => setBubble(null), 1600);
+  };
+
+  useEffect(() => {
+    const reduce = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) return;
+
+    document.documentElement.setAttribute("data-pup", "true");
+    if (layerRef.current) layerRef.current.hidden = false;
+
+    let raf = 0;
+    let curX = 0;
+    let curY = 0;
+    let curScale = 1;
+    let initialized = false;
+    let walkPhase = 0;
+    let lastScrollY = window.scrollY;
+    let lastPrintX = -999;
+    let lastPrintY = -999;
+    let printCursor = 0;
+    let lastFront = true;
+
+    const readStops = (): PupStopRect[] => {
+      const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-pup-stop="true"]'));
+      const sy = window.scrollY;
+      const out: PupStopRect[] = [];
+      for (const el of nodes) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 10 || r.height < 10) continue;
+        out.push({
+          x: r.left,
+          y: r.top,
+          w: r.width,
+          h: r.height,
+          pageY: r.top + sy + r.height * 0.5,
+          pose: el.getAttribute("data-pose") || "sit",
+          behind: el.getAttribute("data-behind") === "true",
+          facing: el.getAttribute("data-facing") === "left" ? -1 : 1,
+        });
+      }
+      return out.sort((a, b) => a.pageY - b.pageY);
+    };
+
+    const tick = (now: number) => {
+      const stops = readStops();
+      if (stops.length > 0 && actorRef.current && bodyWrapRef.current && svgRef.current) {
+        const sy = window.scrollY;
+        const scrollVel = Math.abs(sy - lastScrollY);
+        lastScrollY = sy;
+
+        const anchorPageY = sy + window.innerHeight * 0.54;
+        const target = interpolatePupStops(stops, anchorPageY);
+
+        if (!initialized) {
+          curX = target.x;
+          curY = target.y;
+          curScale = target.scale;
+          initialized = true;
+        } else {
+          curX = lerp(curX, target.x, 0.22);
+          curY = lerp(curY, target.y, 0.22);
+          curScale = lerp(curScale, target.scale, 0.2);
+        }
+
+        const nextFront = !target.behind;
+        if (nextFront !== lastFront) {
+          lastFront = nextFront;
+          if (layerRef.current) layerRef.current.setAttribute("data-front", nextFront ? "true" : "false");
+        }
+
+        const moving = target.traveling || (target.pose === "walk" && scrollVel > 0.5) || Math.hypot(target.x - curX, target.y - curY) > 4;
+        if (moving) {
+          walkPhase += 0.22 + Math.min(scrollVel * 0.015, 0.25);
+        }
+
+        const bob = moving ? Math.abs(Math.sin(walkPhase)) * -8 : Math.sin(now * 0.0026) * 1.4;
+        actorRef.current.style.transform = `translate3d(${curX.toFixed(1)}px, ${(curY + bob).toFixed(1)}px, 0px)`;
+        bodyWrapRef.current.style.transform = `scale(${curScale.toFixed(4)})`;
+
+        // Animate articulated SVG rig parts
+        const svg = svgRef.current;
+        const root = svg.querySelector<SVGGElement>('[data-p="root"]');
+        const body = svg.querySelector<SVGGElement>('[data-p="body"]');
+        const shadow = svg.querySelector<SVGElement>('[data-p="shadow"]');
+        const paws = svg.querySelector<SVGGElement>('[data-p="paws"]');
+        const bf = svg.querySelector<SVGGElement>('[data-p="bf"]');
+        const ff = svg.querySelector<SVGGElement>('[data-p="ff"]');
+        const bn = svg.querySelector<SVGGElement>('[data-p="bn"]');
+        const fn = svg.querySelector<SVGGElement>('[data-p="fn"]');
+        const tail = svg.querySelector<SVGGElement>('[data-p="tail"]');
+        const openEyes = svg.querySelector<SVGGElement>('[data-p="open"]');
+        const shutEyes = svg.querySelector<SVGGElement>('[data-p="shut"]');
+
+        const isPeek = target.pose === "peek" && !moving;
+        if (root) {
+          root.setAttribute("transform", `translate(150 0) scale(${target.facing} 1) translate(-150 0)`);
+        }
+        if (body) body.setAttribute("opacity", isPeek ? "0" : "1");
+        if (shadow) shadow.setAttribute("opacity", isPeek ? "0" : "0.14");
+        if (paws) paws.setAttribute("opacity", isPeek ? "1" : "0");
+
+        const stride = moving ? Math.sin(walkPhase) * 24 : 0;
+        if (bf) bf.setAttribute("transform", `translate(94 192) rotate(${stride.toFixed(1)})`);
+        if (ff) ff.setAttribute("transform", `translate(168 192) rotate(${(-stride).toFixed(1)})`);
+        if (bn) bn.setAttribute("transform", `translate(110 194) rotate(${(-stride).toFixed(1)})`);
+        if (fn) fn.setAttribute("transform", `translate(184 194) rotate(${stride.toFixed(1)})`);
+
+        const wag = moving ? Math.sin(walkPhase * 1.4) * 22 : Math.sin(now * 0.006) * 8 - 16;
+        if (tail) tail.setAttribute("transform", `rotate(${wag.toFixed(1)} 84 150)`);
+
+        // Periodic natural blink every ~4.2 seconds
+        const blink = now % 4200 > 4060;
+        if (openEyes) openEyes.setAttribute("opacity", blink ? "0" : "1");
+        if (shutEyes) shutEyes.setAttribute("opacity", blink ? "1" : "0");
+
+        // Stamp paw prints along Teddy's path in page coordinates when traveling
+        if (moving && !isPeek) {
+          const px = curX + 150 * curScale;
+          const py = curY + sy + 218 * curScale;
+          if (Math.hypot(px - lastPrintX, py - lastPrintY) > 68) {
+            const printsContainer = document.querySelector(".pup-prints");
+            const printEl = printsContainer?.children[printCursor % (printsContainer.children.length || 1)] as SVGElement | undefined;
+            if (printEl) {
+              const angle = (Math.atan2(py - lastPrintY, px - lastPrintX) * 180) / Math.PI + 90;
+              printEl.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) rotate(${angle.toFixed(0)}deg)`;
+              printEl.style.opacity = "0.28";
+              printCursor += 1;
+            }
+            lastPrintX = px;
+            lastPrintY = py;
+          }
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+      document.documentElement.removeAttribute("data-pup");
+    };
+  }, []);
+
   return (
-    <div aria-hidden="true" className="pup-layer" hidden data-front="true">
-      <div className="pup-actor">
-        <div className="pup-actor__body">
-          <svg viewBox="0 0 300 240" style={{ overflow: "visible" } as React.CSSProperties} aria-hidden="true" focusable="false">
-            <g data-p="root">
-              <ellipse data-p="shadow" cx="150" cy="230" rx="92" ry="7" fill="#2a170e" opacity="0" transform="translate(0 0) scale(1 1)" style={{ transformBox: "fill-box", transformOrigin: "center" } as React.CSSProperties} />
-              <g data-p="body" transform="translate(0 0) rotate(0 196 206) translate(196 0) scale(1 1) translate(-196 0)" opacity="0">
-                <g data-p="bf" transform="translate(94 192) rotate(0)" opacity="1">
-                  <path d="M-14 -14 C-14 4 -12 18 -12 27 C-12 34 -7 36 0 36 C9 36 13 33 13 27 C13 18 14 4 14 -14Z" fill="#e4a352" />
-                  <path d="M-14 -14 C-14 4 -12 18 -12 27 C-12 34 -7 36 0 36 C9 36 13 33 13 27 C13 18 14 4 14 -14" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                  <path d="M-3.5 29 v5 M4.5 29 v5" stroke="#2a170e" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                </g>
-                <g data-p="ff" transform="translate(168 192) rotate(0)">
-                  <path d="M-11 -14 C-11 4 -12 18 -12 27 C-12 34 -7 36 0 36 C9 36 13 33 13 27 C13 18 11 4 11 -14Z" fill="#e4a352" />
-                  <path d="M-11 -14 C-11 4 -12 18 -12 27 C-12 34 -7 36 0 36 C9 36 13 33 13 27 C13 18 11 4 11 -14" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                  <path d="M-3.5 29 v5 M4.5 29 v5" stroke="#2a170e" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                </g>
-                <g data-p="tail" transform="rotate(-20 84 150)">
-                  <path d="M86 152 C80 146 76 140 74 136" stroke="#2a170e" strokeWidth="9" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                  <path d="M86 152 C80 146 76 140 74 136" stroke="#f2be6b" strokeWidth="4" fill="none" strokeLinecap="round" />
-                  <path d="M70.0 110.0Q78.1 105.0 80.9 113.7Q90.5 114.8 86.7 123.2Q93.4 129.9 84.7 134.0Q85.2 143.1 75.8 141.0Q70.0 148.3 64.2 141.0Q54.8 143.1 55.3 134.0Q46.6 129.9 53.3 123.2Q49.5 114.8 59.1 113.7Q61.9 105.0 70.0 110.0Z" fill="#f2be6b" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" />
-                </g>
-                <g data-p="bn" transform="translate(110 194) rotate(0)" opacity="1">
-                  <path d="M-15 -14 C-15 4 -12 16 -12 25 C-12 32 -7 34 0 34 C9 34 13 31 13 25 C13 16 15 4 15 -14Z" fill="#f2be6b" />
-                  <path d="M-15 -14 C-15 4 -12 16 -12 25 C-12 32 -7 34 0 34 C9 34 13 31 13 25 C13 16 15 4 15 -14" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                  <path d="M-3.5 27 v5 M4.5 27 v5" stroke="#2a170e" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                </g>
-                <path d="M76.8 175.6Q69.0 167.9 78.2 160.7Q76.6 151.8 90.3 147.3Q95.2 138.9 110.9 137.9Q121.6 131.3 136.7 134.0Q151.1 130.5 162.9 136.4Q178.7 136.4 185.3 144.5Q199.7 148.2 199.7 157.1Q210.3 163.7 203.9 171.9Q208.7 180.4 197.0 186.3Q195.3 195.2 180.3 198.0Q172.3 205.7 156.6 204.8Q143.7 210.0 130.0 205.6Q114.5 207.4 105.1 200.2Q89.7 198.3 86.3 189.6Q73.6 184.3 76.8 175.6Z" fill="#f2be6b" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" />
-                <path d="M182.7 196.4Q169.4 196.9 166.6 183.0Q156.1 174.1 162.3 161.5Q159.6 147.6 171.9 142.2Q178.2 129.7 191.0 134.0Q203.3 128.7 210.5 140.8Q223.1 145.2 221.3 159.3Q228.4 171.5 218.5 181.0Q216.6 195.1 203.2 195.7Q193.3 205.1 182.7 196.4Z" fill="#f2be6b" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" />
-                <g data-p="fn" transform="translate(186 194) rotate(0)">
-                  <path d="M-12 -14 C-12 4 -12 16 -12 25 C-12 32 -7 34 0 34 C9 34 13 31 13 25 C13 16 12 4 12 -14Z" fill="#f2be6b" />
-                  <path d="M-12 -14 C-12 4 -12 16 -12 25 C-12 32 -7 34 0 34 C9 34 13 31 13 25 C13 16 12 4 12 -14" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                  <path d="M-3.5 27 v5 M4.5 27 v5" stroke="#2a170e" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                </g>
-              </g>
-              <g data-p="haunch" opacity="0" transform="translate(0 0)">
-                <path d="M80.0 204.0Q75.1 194.9 85.7 189.9Q88.4 180.2 100.7 181.2Q110.0 174.6 119.3 181.2Q131.6 180.2 134.3 189.9Q144.9 194.9 140.0 204.0Q144.9 213.1 134.3 218.1Q131.6 227.8 119.3 226.8Q110.0 233.4 100.7 226.8Q88.4 227.8 85.7 218.1Q75.1 213.1 80.0 204.0Z" fill="#f2be6b" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" />
-                <path d="M112 214 C126 212 142 214 146 221 C148 226 144 229 136 229 L116 229 C108 229 104 224 106 219 Z" fill="#f2be6b" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" />
-                <path d="M132 222v5M139 222v5" stroke="#2a170e" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-              </g>
-              <g data-p="head" transform="translate(0 4) rotate(0 212 100)">
-                <path d="M178 146 Q212 162 246 146 L246 154 Q212 170 178 154 Z" fill="#a24a1a" stroke="#2a170e" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                <path d="M212 160 C212 156 206 155 206 159.4 C206 163 212 166.6 212 168.4 C212 166.6 218 163 218 159.4 C218 155 212 156 212 160 Z" fill="#fbe3b4" stroke="#2a170e" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
-                <path data-p="earL" d="M177.1 78.7Q186.9 70.8 186.6 87.4Q196.0 89.9 189.9 105.5Q195.2 117.3 185.5 126.0Q184.7 142.8 175.2 141.2Q168.7 156.5 162.9 145.3Q153.1 153.2 153.4 136.6Q144.0 134.1 150.1 118.5Q144.8 106.7 154.5 98.0Q155.3 81.2 164.8 82.8Q171.3 67.5 177.1 78.7Z" fill="#e4a352" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" transform="rotate(-6 174 82)" />
-                <path data-p="earR" d="M246.9 78.7Q252.7 67.5 259.2 82.8Q268.7 81.2 269.5 98.0Q279.2 106.7 273.9 118.5Q280.0 134.1 270.6 136.6Q270.9 153.2 261.1 145.3Q255.3 156.5 248.8 141.2Q239.3 142.8 238.5 126.0Q228.8 117.3 234.1 105.5Q228.0 89.9 237.4 87.4Q237.1 70.8 246.9 78.7Z" fill="#e4a352" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" transform="rotate(6 250 82)" />
-                <path d="M212.0 54.0Q223.4 48.2 231.5 57.5Q244.5 56.1 248.1 67.5Q260.7 70.7 259.1 82.4Q269.4 89.7 263.0 100.0Q269.4 110.3 259.1 117.6Q260.7 129.3 248.1 132.5Q244.5 143.9 231.5 142.5Q223.4 151.8 212.0 146.0Q200.6 151.8 192.5 142.5Q179.5 143.9 175.9 132.5Q163.3 129.3 164.9 117.6Q154.6 110.3 161.0 100.0Q154.6 89.7 164.9 82.4Q163.3 70.7 175.9 67.5Q179.5 56.1 192.5 57.5Q200.6 48.2 212.0 54.0Z" fill="#f2be6b" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" />
-                <path d="M195.0 52.0Q190.7 45.8 200.0 43.5Q203.2 36.9 212.0 40.0Q220.8 36.9 224.0 43.5Q233.3 45.8 229.0 52.0Q233.3 58.2 224.0 60.5Q220.8 67.1 212.0 64.0Q203.2 67.1 200.0 60.5Q190.7 58.2 195.0 52.0Z" fill="#f2be6b" stroke="#2a170e" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-                <path d="M188 120 C188 106 200 100 212 100 C224 100 236 106 236 120 C236 133 225 140 212 140 C199 140 188 133 188 120 Z" fill="#fbe3b4" />
-                <circle cx="181" cy="116" r="7" fill="#f9b9a6" opacity="0.85" />
-                <circle cx="243" cy="116" r="7" fill="#f9b9a6" opacity="0.85" />
-                <g data-p="eyes" transform="translate(0 0)">
-                  <g data-p="open" opacity="1">
-                    <g data-p="blink" transform="translate(0 0) scale(1 1)">
-                      <ellipse cx="194" cy="98" rx="7.4" ry="8.6" fill="#2a170e" />
-                      <ellipse cx="230" cy="98" rx="7.4" ry="8.6" fill="#2a170e" />
-                      <circle cx="196.6" cy="94.6" r="2.7" fill="#fff" />
-                      <circle cx="232.6" cy="94.6" r="2.7" fill="#fff" />
-                      <circle cx="192" cy="101.2" r="1.2" fill="#fff" />
-                      <circle cx="228" cy="101.2" r="1.2" fill="#fff" />
-                    </g>
-                  </g>
-                </g>
-                <path data-p="happy" d="M186.5 101 Q194 91.5 201.5 101 M222.5 101 Q230 91.5 237.5 101" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" fill="none" opacity="0" />
-                <path data-p="shut" d="M186.5 97 Q194 103.5 201.5 97 M222.5 97 Q230 103.5 237.5 97" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" fill="none" opacity="0" />
-                <path d="M204.5 111.5 Q212 107.2 219.5 111.5 Q218.2 118.4 212 120 Q205.8 118.4 204.5 111.5 Z" fill="#2a170e" />
-                <path d="M212 120 V124.5 M212 124.5 Q207.2 129.6 202.8 125.2 M212 124.5 Q216.8 129.6 221.2 125.2" stroke="#2a170e" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-                <path data-p="tongue" d="M207.6 127.4 Q212 136.6 216.4 127.4 Z" fill="#e98c8c" stroke="#2a170e" strokeWidth="2.2" strokeLinejoin="round" opacity="1" />
-                <g data-p="mouth" opacity="0">
-                  <path d="M203 126 Q212 122 221 126 Q219 138 212 139 Q205 138 203 126 Z" fill="#6b2a1c" stroke="#2a170e" strokeWidth="2.6" strokeLinejoin="round" strokeLinecap="round" />
-                  <path d="M206.5 133.5 Q212 130 217.5 133.5 Q215 138 212 138 Q209 138 206.5 133.5 Z" fill="#e98c8c" />
-                </g>
-              </g>
-              <g data-p="ledge" opacity="1">
-                <path d="M175 159 C175 148 181 142 190 142 C199 142 205 148 205 159 Z M219 159 C219 148 225 142 234 142 C243 142 249 148 249 159 Z" fill="#f2be6b" stroke="#2a170e" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round" />
-                <path d="M186 153 v-4.5 M194 153 v-4.5 M230 153 v-4.5 M238 153 v-4.5" stroke="#2a170e" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" fill="none" />
-              </g>
-            </g>
+    <div ref={layerRef} aria-hidden="true" className="pup-layer" hidden data-front="true" data-anchor="top">
+      <div ref={actorRef} className="pup-actor" onClick={petTeddy}>
+        <div ref={bodyWrapRef} className="pup-actor__body">
+          <svg ref={svgRef} viewBox="0 0 300 240" style={{ overflow: "visible" } as CSSProperties} aria-hidden="true" focusable="false">
+            {TEDDY_POSES.actor}
           </svg>
         </div>
         <span className="pup-bubble-at">
-          <span className="pup-bubble" data-show="false" />
+          <span className="pup-bubble font-scrawl" data-show={bubble ? "true" : "false"}>
+            {bubble ?? ""}
+          </span>
         </span>
       </div>
     </div>
